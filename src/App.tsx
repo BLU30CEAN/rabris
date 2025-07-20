@@ -56,13 +56,17 @@ const App: React.FC = () => {
   } = useTetrisGame();
 
   const [nextPiece, setNextPiece] = useState<string>("");
+  const [keyStates, setKeyStates] = useState<Set<string>>(new Set());
 
   // 키보드 이벤트 처리
   useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (gameState.gameOver) return;
 
-      switch (event.code) {
+      const key = event.code;
+      setKeyStates(prev => new Set(prev).add(key));
+
+      switch (key) {
         case "ArrowLeft":
           event.preventDefault();
           movePiece(-1, 0);
@@ -95,8 +99,21 @@ const App: React.FC = () => {
       }
     };
 
-    window.addEventListener("keydown", handleKeyPress);
-    return () => window.removeEventListener("keydown", handleKeyPress);
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const key = event.code;
+      setKeyStates(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(key);
+        return newSet;
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
   }, [
     gameState.gameOver,
     movePiece,
@@ -105,6 +122,25 @@ const App: React.FC = () => {
     togglePause,
     resetGame,
   ]);
+
+  // 키 꾹 누르기 처리
+  useEffect(() => {
+    if (gameState.gameOver || gameState.isPaused) return;
+
+    const interval = setInterval(() => {
+      if (keyStates.has("ArrowLeft")) {
+        movePiece(-1, 0);
+      }
+      if (keyStates.has("ArrowRight")) {
+        movePiece(1, 0);
+      }
+      if (keyStates.has("ArrowDown")) {
+        movePiece(0, 1);
+      }
+    }, 100); // 100ms 간격으로 반복
+
+    return () => clearInterval(interval);
+  }, [keyStates, gameState.gameOver, gameState.isPaused, movePiece]);
 
   // 다음 블록 업데이트
   useEffect(() => {

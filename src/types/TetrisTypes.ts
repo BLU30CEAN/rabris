@@ -1,4 +1,4 @@
-export type BlockType = "ㅌ" | "ㅗ" | "ㄲ" | "ㅣ";
+export type BlockType = "I" | "O" | "T" | "S" | "Z" | "J" | "L";
 
 export interface Block {
   type: BlockType;
