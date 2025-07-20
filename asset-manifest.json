@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/rabris/static/css/main.04672661.css",
-    "main.js": "/rabris/static/js/main.b39f53cc.js",
+    "main.css": "/rabris/static/css/main.d8afa191.css",
+    "main.js": "/rabris/static/js/main.0a1f5a76.js",
     "index.html": "/rabris/index.html",
-    "main.04672661.css.map": "/rabris/static/css/main.04672661.css.map",
-    "main.b39f53cc.js.map": "/rabris/static/js/main.b39f53cc.js.map"
+    "main.d8afa191.css.map": "/rabris/static/css/main.d8afa191.css.map",
+    "main.0a1f5a76.js.map": "/rabris/static/js/main.0a1f5a76.js.map"
   },
   "entrypoints": [
-    "static/css/main.04672661.css",
-    "static/js/main.b39f53cc.js"
+    "static/css/main.d8afa191.css",
+    "static/js/main.0a1f5a76.js"
   ]
 }
