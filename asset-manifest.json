@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/rabris/static/css/main.c876d8bc.css",
+    "main.js": "/rabris/static/js/main.b22f56ff.js",
+    "static/js/453.4bfff70e.chunk.js": "/rabris/static/js/453.4bfff70e.chunk.js",
+    "index.html": "/rabris/index.html",
+    "main.c876d8bc.css.map": "/rabris/static/css/main.c876d8bc.css.map",
+    "main.b22f56ff.js.map": "/rabris/static/js/main.b22f56ff.js.map",
+    "453.4bfff70e.chunk.js.map": "/rabris/static/js/453.4bfff70e.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.c876d8bc.css",
+    "static/js/main.b22f56ff.js"
+  ]
+}
