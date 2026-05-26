@@ -1,435 +1,368 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import './App.css';
-import { TetrisState, Piece } from './types/tetris';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import "./App.css";
+import {
+  Board,
+  CellValue,
+  COLS,
+  GameState,
+  PIECE_COLORS,
+  Piece,
+  PieceLetter,
+  ROWS,
+  clearLines,
+  collides,
+  dropIntervalMs,
+  emptyBoard,
+  ghostOf,
+  levelOf,
+  makePiece,
+  merge,
+  newBag,
+  pieceMatrixForPreview,
+  scoreFor,
+  tryMove,
+  tryRotate,
+} from "./engine/tetris";
 
-// 테트리스 블록 정의 (일반적인 테트리스 색상)
-const TETROMINOS: { [key: string]: { shape: number[][]; color: string; emoji: string } } = {
-  0: { shape: [[0]], color: '0, 0, 0', emoji: '' },
-  I: {
-    shape: [[0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]],
-    color: '0, 240, 240',
-    emoji: ''
-  },
-  J: {
-    shape: [[0, 1, 0], [0, 1, 0], [1, 1, 0]],
-    color: '0, 0, 240',
-    emoji: ''
-  },
-  L: {
-    shape: [[0, 1, 0], [0, 1, 0], [0, 1, 1]],
-    color: '240, 160, 0',
-    emoji: ''
-  },
-  O: {
-    shape: [[1, 1], [1, 1]],
-    color: '240, 240, 0',
-    emoji: ''
-  },
-  S: {
-    shape: [[0, 1, 1], [1, 1, 0], [0, 0, 0]],
-    color: '0, 240, 0',
-    emoji: ''
-  },
-  T: {
-    shape: [[0, 0, 0], [1, 1, 1], [0, 1, 0]],
-    color: '160, 0, 240',
-    emoji: ''
-  },
-  Z: {
-    shape: [[1, 1, 0], [0, 1, 1], [0, 0, 0]],
-    color: '240, 0, 0',
-    emoji: ''
-  },
-};
+// ─── state ─────────────────────────────────────────────────────────────────
+type Action =
+  | { type: "tick" }
+  | { type: "move"; dx: number }
+  | { type: "softDrop" }
+  | { type: "hardDrop" }
+  | { type: "rotate" }
+  | { type: "togglePause" }
+  | { type: "start" };
 
-// 블록 타입을 숫자로 매핑
-const BLOCK_TYPES = {
-  I: 1,
-  J: 2,
-  L: 3,
-  O: 4,
-  S: 5,
-  T: 6,
-  Z: 7
-};
+function pull(bag: PieceLetter[]): { piece: Piece; bag: PieceLetter[] } {
+  let b = bag;
+  if (b.length === 0) b = newBag();
+  const piece = makePiece(b[0]);
+  return { piece, bag: b.slice(1) };
+}
 
-// 랜덤 블록 생성
-const randomTetromino = (): { shape: number[][]; color: string; emoji: string } => {
-  const tetrominos = 'IJLOSTZ';
-  const randTetromino = tetrominos[Math.floor(Math.random() * tetrominos.length)];
-  return TETROMINOS[randTetromino];
-};
+function initialState(): GameState {
+  const board = emptyBoard();
+  const a = pull(newBag());
+  const n = pull(a.bag);
+  return {
+    board,
+    active: a.piece,
+    next: n.piece,
+    bag: n.bag,
+    score: 0,
+    level: 1,
+    lines: 0,
+    status: "ready",
+    combo: 0,
+  };
+}
 
-const App: React.FC = () => {
-  const [dropTime, setDropTime] = useState<number | null>(null);
-  const [gameOver, setGameOver] = useState(false);
-  const [player, setPlayer] = useState({
-    pos: { x: 0, y: 0 },
-    tetromino: TETROMINOS[0].shape,
-    collided: false,
-  });
-  const [nextTetromino, setNextTetromino] = useState(randomTetromino());
-  const [stage, setStage] = useState(createBoard());
-  const [score, setScore] = useState(0);
-  const [level, setLevel] = useState(1);
-  const [lines, setLines] = useState(0);
+function lockAndAdvance(state: GameState): GameState {
+  const merged = merge(state.active, state.board);
+  const { board, cleared } = clearLines(merged);
+  const newLines = state.lines + cleared;
+  const level = levelOf(newLines);
+  const combo = cleared > 0 ? state.combo + 1 : 0;
+  const score = state.score + scoreFor(cleared, level, state.combo);
 
-  // 게임 보드 생성
-  function createBoard(): [number, string][][] {
-    return Array.from(Array(20), () => new Array(12).fill([0, 'clear']));
+  // Pull next active from `next`, generate new next from bag.
+  const active = state.next;
+  const pulled = pull(state.bag);
+
+  // If newly spawned piece already collides → game over.
+  const gameOver = collides(active, board);
+
+  return {
+    ...state,
+    board,
+    active: gameOver ? state.active : active,
+    next: pulled.piece,
+    bag: pulled.bag,
+    lines: newLines,
+    level,
+    score,
+    combo,
+    status: gameOver ? "over" : state.status,
+  };
+}
+
+function reducer(state: GameState, action: Action): GameState {
+  switch (action.type) {
+    case "start": {
+      const s = initialState();
+      return { ...s, status: "playing" };
+    }
+    case "togglePause": {
+      if (state.status === "playing") return { ...state, status: "paused" };
+      if (state.status === "paused") return { ...state, status: "playing" };
+      return state;
+    }
+    case "tick": {
+      if (state.status !== "playing") return state;
+      const moved = tryMove(state.active, state.board, 0, 1);
+      if (moved) return { ...state, active: moved };
+      return lockAndAdvance(state);
+    }
+    case "move": {
+      if (state.status !== "playing") return state;
+      const m = tryMove(state.active, state.board, action.dx, 0);
+      return m ? { ...state, active: m } : state;
+    }
+    case "softDrop": {
+      if (state.status !== "playing") return state;
+      const m = tryMove(state.active, state.board, 0, 1);
+      if (m) return { ...state, active: m, score: state.score + 1 };
+      return lockAndAdvance(state);
+    }
+    case "hardDrop": {
+      if (state.status !== "playing") return state;
+      const g = ghostOf(state.active, state.board);
+      const dropped = g.y - state.active.y;
+      const withGhostPos: GameState = {
+        ...state,
+        active: g,
+        score: state.score + dropped * 2,
+      };
+      return lockAndAdvance(withGhostPos);
+    }
+    case "rotate": {
+      if (state.status !== "playing") return state;
+      const r = tryRotate(state.active, state.board);
+      return { ...state, active: r };
+    }
+    default:
+      return state;
+  }
+}
+
+// ─── rendering helpers ─────────────────────────────────────────────────────
+function buildVisibleBoard(state: GameState): Board {
+  const board: Board = state.board.map((r) => r.slice());
+
+  // ghost piece (preview where active will land)
+  if (state.status === "playing") {
+    const g = ghostOf(state.active, state.board);
+    for (let y = 0; y < g.shape.length; y++)
+      for (let x = 0; x < g.shape[y].length; x++) {
+        if (!g.shape[y][x]) continue;
+        const bx = g.x + x;
+        const by = g.y + y;
+        if (by >= 0 && by < ROWS && bx >= 0 && bx < COLS && !board[by][bx]) {
+          board[by][bx] = "G";
+        }
+      }
   }
 
-  // 충돌 감지
-  const checkCollision = (player: any, stage: [number, string][][], { x: moveX, y: moveY }: { x: number; y: number }): boolean => {
-    for (let y = 0; y < player.tetromino.length; y += 1) {
-      for (let x = 0; x < player.tetromino[y].length; x += 1) {
-        if (player.tetromino[y][x] !== 0) {
-          if (
-            !stage[y + player.pos.y + moveY] ||
-            !stage[y + player.pos.y + moveY][x + player.pos.x + moveX] ||
-            stage[y + player.pos.y + moveY][x + player.pos.x + moveX][1] !== 'clear'
-          ) {
-            return true;
-          }
-        }
+  // active piece (on top of ghost)
+  for (let y = 0; y < state.active.shape.length; y++)
+    for (let x = 0; x < state.active.shape[y].length; x++) {
+      if (!state.active.shape[y][x]) continue;
+      const bx = state.active.x + x;
+      const by = state.active.y + y;
+      if (by >= 0 && by < ROWS && bx >= 0 && bx < COLS) {
+        board[by][bx] = state.active.letter;
       }
     }
-    return false;
-  };
+  return board;
+}
 
-  // 플레이어 이동
-  const movePlayer = (dir: { x: number; y: number }): void => {
-    if (!checkCollision(player, stage, dir)) {
-      setPlayer(prev => ({
-        ...prev,
-        pos: { x: prev.pos.x + dir.x, y: prev.pos.y + dir.y }
-      }));
-    }
-  };
-
-  // 블록 회전
-  const rotate = (matrix: number[][], dir: number): number[][] => {
-    const rotatedTetro = matrix.map((_, index) =>
-      matrix.map(col => col[index])
-    );
-    if (dir > 0) return rotatedTetro.map(row => row.reverse());
-    return rotatedTetro.reverse();
-  };
-
-  const playerRotate = (): void => {
-    const rotated = rotate(player.tetromino, 1);
-    let offset = 1;
-    while (checkCollision({ ...player, tetromino: rotated }, stage, { x: 0, y: 0 })) {
-      rotated.forEach((_, index) => {
-        rotated[index] = rotated[index].map((_, index2) => rotated[index][index2] === 0 && rotated[index][index2 + 1] !== 0 ? rotated[index][index2 + 1] : rotated[index][index2]);
-      });
-      offset += 1;
-      if (offset > rotated[0].length) {
-        return;
-      }
-    }
-    setPlayer(prev => ({
-      ...prev,
-      tetromino: rotated
-    }));
-  };
-
-  // 빠른 낙하 (즉시 하강) - 수정됨
-  const dropPlayer = (): void => {
-    let dropDistance = 0;
-    while (!checkCollision(player, stage, { x: 0, y: dropDistance + 1 })) {
-      dropDistance += 1;
-    }
-    movePlayer({ x: 0, y: dropDistance });
-  };
-
-  // 블록 고정
-  const drop = useCallback((): void => {
-    if (!checkCollision(player, stage, { x: 0, y: 1 })) {
-      movePlayer({ x: 0, y: 1 });
-    } else {
-      if (player.pos.y < 1) {
-        setGameOver(true);
-        setDropTime(null);
-        return;
-      }
-      setPlayer(prev => ({
-        ...prev,
-        collided: true
-      }));
-    }
-  }, [player, stage]);
-
-  // 라인 제거
-  const sweepRows = useCallback((newStage: [number, string][][]): [number, string][][] => {
-    return newStage.reduce((acc, row) => {
-      if (row.findIndex(cell => cell[0] === 0) === -1) {
-        setLines(prev => prev + 1);
-        setScore(prev => prev + 100 * level);
-        acc.unshift(new Array(newStage[0].length).fill([0, 'clear']));
-        return acc;
-      }
-      acc.push(row);
-      return acc;
-    }, [] as [number, string][][]);
-  }, [level]);
-
-  // 새 블록 생성
-  const startGame = (): void => {
-    const newStage = createBoard();
-    setStage(newStage);
-    setDropTime(1000);
-    setGameOver(false);
-    setScore(0);
-    setLevel(1);
-    setLines(0);
-    const firstTetromino = randomTetromino();
-    setPlayer({
-      pos: { x: 4, y: 0 },
-      tetromino: firstTetromino.shape,
-      collided: false,
-    });
-    setNextTetromino(randomTetromino());
-    
-    // 게임 시작 시 첫 번째 블록을 보드에 표시
-    const updatedStage = newStage.map(row => [...row]);
-    firstTetromino.shape.forEach((row, y) => {
-      row.forEach((value, x) => {
-        if (value !== 0) {
-          updatedStage[y + 0][x + 4] = [1, 'clear'];
-        }
-      });
-    });
-    setStage(updatedStage);
-  };
-
-  // 키보드 이벤트
-  const move = useCallback(({ keyCode }: { keyCode: number }) => {
-    if (!gameOver) {
-      if (keyCode === 37) {
-        movePlayer({ x: -1, y: 0 });
-      } else if (keyCode === 39) {
-        movePlayer({ x: 1, y: 0 });
-      } else if (keyCode === 40) {
-        drop();
-      } else if (keyCode === 38) {
-        playerRotate();
-      } else if (keyCode === 32) {
-        dropPlayer(); // 스페이스바로 즉시 하강
-      }
-    }
-  }, [gameOver, drop, dropPlayer, movePlayer, playerRotate]);
-
-  useEffect(() => {
-    document.addEventListener('keydown', move);
-    return () => {
-      document.removeEventListener('keydown', move);
+function cellStyle(value: CellValue, ghostLetter?: PieceLetter): React.CSSProperties {
+  if (!value) return {};
+  if (value === "G") {
+    const c = ghostLetter ? PIECE_COLORS[ghostLetter] : "#94a3b8";
+    return {
+      background: "transparent",
+      boxShadow: `inset 0 0 0 2px ${c}55`,
+      borderRadius: 4,
     };
-  }, [move]);
+  }
+  return { background: PIECE_COLORS[value as PieceLetter] };
+}
 
-  // 자동 낙하
+// ─── App component ────────────────────────────────────────────────────────
+export default function App() {
+  const [state, dispatch] = useReducer(reducer, undefined, initialState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const visible = useMemo(() => buildVisibleBoard(state), [state]);
+
+  // Auto-fall — interval that reads the latest state via ref.
   useEffect(() => {
-    if (dropTime) {
-      const interval = setInterval(() => {
-        drop();
-      }, dropTime);
-      return () => {
-        clearInterval(interval);
-      };
-    }
-  }, [dropTime, drop]);
+    if (state.status !== "playing") return;
+    const ms = dropIntervalMs(state.level);
+    const id = window.setInterval(() => dispatch({ type: "tick" }), ms);
+    return () => window.clearInterval(id);
+  }, [state.status, state.level]);
 
-  // 블록 고정 후 처리
+  // Keyboard — register once.
   useEffect(() => {
-    if (player.collided) {
-      const newStage = stage.map(row =>
-        row.map(cell => (cell[1] === 'clear' ? [0, 'clear'] as [number, string] : cell))
-      );
-
-      player.tetromino.forEach((row, y) => {
-        row.forEach((value, x) => {
-          if (value !== 0) {
-            newStage[y + player.pos.y][x + player.pos.x] = [
-              value,
-              `${player.collided ? 'merged' : 'clear'}`,
-            ] as [number, string];
-          }
-        });
-      });
-
-      if (player.collided) {
-        const newStage2 = sweepRows(newStage);
-        setStage(newStage2);
-        const newTetromino = randomTetromino();
-        setPlayer({
-          pos: { x: 4, y: 0 },
-          tetromino: newTetromino.shape,
-          collided: false,
-        });
-        setNextTetromino(randomTetromino());
-        
-        // 새 블록을 보드에 표시
-        const updatedStage = newStage2.map(row => [...row]);
-        newTetromino.shape.forEach((row, y) => {
-          row.forEach((value, x) => {
-            if (value !== 0) {
-              updatedStage[y + 0][x + 4] = [1, 'clear'];
-            }
-          });
-        });
-        setStage(updatedStage);
+    const onKey = (e: KeyboardEvent) => {
+      if (stateRef.current.status === "over") {
+        if (e.key === "Enter" || e.key === " ") dispatch({ type: "start" });
+        return;
       }
-    }
-  }, [player, stage, nextTetromino, sweepRows]);
+      switch (e.key) {
+        case "ArrowLeft":
+          dispatch({ type: "move", dx: -1 });
+          e.preventDefault();
+          break;
+        case "ArrowRight":
+          dispatch({ type: "move", dx: 1 });
+          e.preventDefault();
+          break;
+        case "ArrowDown":
+          dispatch({ type: "softDrop" });
+          e.preventDefault();
+          break;
+        case "ArrowUp":
+        case "x":
+        case "X":
+          dispatch({ type: "rotate" });
+          e.preventDefault();
+          break;
+        case " ":
+          dispatch({ type: "hardDrop" });
+          e.preventDefault();
+          break;
+        case "p":
+        case "P":
+          dispatch({ type: "togglePause" });
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
-  // 레벨 업
-  useEffect(() => {
-    if (lines > level * 10) {
-      setLevel(prev => prev + 1);
-      setDropTime(1000 / level);
-    }
-  }, [lines, level]);
+  const nextMatrix = useMemo(() => pieceMatrixForPreview(state.next.letter), [state.next.letter]);
+  const ghostLetterForVisible = state.active.letter;
+
+  const onStart = useCallback(() => dispatch({ type: "start" }), []);
+  const onPause = useCallback(() => dispatch({ type: "togglePause" }), []);
 
   return (
-    <div className="App">
-      <div className="game-container">
-        <div className="game-info">
-          <h1>🐰 토끼 테트리스 🥕</h1>
-          <div className="score-board">
-            <div>🥕 점수: {score}</div>
-            <div>📊 레벨: {level}</div>
-            <div>📈 라인: {lines}</div>
+    <div className="rabris">
+      <div className="frame">
+        <aside className="side left">
+          <div className="brand">
+            <span className="brand-dot" />
+            <span className="brand-name">rabris</span>
+            <span className="brand-tag">v0.3</span>
           </div>
-          <button className="start-button" onClick={startGame}>
-            {gameOver ? '게임 오버 - 다시 시작' : '게임 시작'}
-          </button>
-        </div>
-        
-        <div className="game-board">
-          <div className="stage">
-            {stage.map((row, y) =>
-              row.map((cell, x) => {
-                // 현재 플레이어 블록이 있는 위치인지 확인
-                const isPlayerBlock = player.tetromino.some((tetroRow, ty) =>
-                  tetroRow.some((tetroCell, tx) => 
-                    tetroCell !== 0 && 
-                    y === player.pos.y + ty && 
-                    x === player.pos.x + tx
-                  )
-                );
-                
-                return (
-                  <Cell 
-                    key={`${y}-${x}`} 
-                    type={isPlayerBlock ? 1 : cell[0]} 
-                  />
-                );
-              })
+          <Stat label="SCORE" value={state.score.toLocaleString()} />
+          <Stat label="LEVEL" value={String(state.level)} />
+          <Stat label="LINES" value={String(state.lines)} />
+
+          <div className="actions">
+            {state.status === "ready" && (
+              <button className="btn primary" onClick={onStart}>start</button>
+            )}
+            {(state.status === "playing" || state.status === "paused") && (
+              <button className="btn" onClick={onPause}>
+                {state.status === "paused" ? "resume" : "pause"}
+              </button>
+            )}
+            {state.status === "over" && (
+              <button className="btn primary" onClick={onStart}>new game</button>
+            )}
+          </div>
+        </aside>
+
+        <div className="board-wrap">
+          <div className="board" aria-label="tetris board">
+            {visible.map((row, y) =>
+              row.map((cell, x) => (
+                <div
+                  key={`${y}-${x}`}
+                  className={`cell ${cell ? "filled" : ""}`}
+                  style={cellStyle(cell, ghostLetterForVisible)}
+                />
+              )),
+            )}
+            {state.status === "paused" && <div className="overlay">paused</div>}
+            {state.status === "over" && (
+              <div className="overlay">
+                <div className="overlay-title">game over</div>
+                <div className="overlay-sub">press enter</div>
+              </div>
             )}
           </div>
         </div>
 
-        <div className="next-piece">
-          <h3>다음 블록:</h3>
-          <div className="next-stage">
-            {nextTetromino.shape.map((row, y) =>
-              row.map((cell, x) => (
-                <NextCell key={`next-${y}-${x}`} type={cell} tetromino={nextTetromino} />
-              ))
-            )}
-          </div>
-          
-          <div className="game-controls">
-            <h4>게임 컨트롤</h4>
-            <div className="gamepad-layout">
-              <div className="d-pad">
-                <button 
-                  className="control-btn up-btn"
-                  onClick={() => playerRotate()}
-                  disabled={gameOver}
-                >
-                  ↑
-                </button>
-                <div className="d-pad-middle">
-                  <button 
-                    className="control-btn left-btn"
-                    onClick={() => movePlayer({ x: -1, y: 0 })}
-                    disabled={gameOver}
-                  >
-                    ←
-                  </button>
-                  <button 
-                    className="control-btn right-btn"
-                    onClick={() => movePlayer({ x: 1, y: 0 })}
-                    disabled={gameOver}
-                  >
-                    →
-                  </button>
-                </div>
-                <button 
-                  className="control-btn down-btn"
-                  onClick={() => drop()}
-                  disabled={gameOver}
-                >
-                  ↓
-                </button>
-              </div>
-              <div className="action-buttons">
-                <button 
-                  className="control-btn action-btn"
-                  onClick={() => dropPlayer()}
-                  disabled={gameOver}
-                >
-                  A
-                </button>
-                <button 
-                  className="control-btn action-btn"
-                  onClick={() => playerRotate()}
-                  disabled={gameOver}
-                >
-                  B
-                </button>
-              </div>
+        <aside className="side right">
+          <div className="preview-card">
+            <div className="preview-label">NEXT</div>
+            <div className="preview">
+              {nextMatrix.map((row, y) =>
+                row.map((v, x) => (
+                  <div
+                    key={`p-${y}-${x}`}
+                    className="cell preview-cell"
+                    style={v ? { background: PIECE_COLORS[state.next.letter] } : undefined}
+                  />
+                )),
+              )}
             </div>
           </div>
-        </div>
+
+          <div className="legend">
+            <div><kbd>←</kbd><kbd>→</kbd> move</div>
+            <div><kbd>↑</kbd> rotate</div>
+            <div><kbd>↓</kbd> soft drop</div>
+            <div><kbd>space</kbd> hard drop</div>
+            <div><kbd>p</kbd> pause</div>
+          </div>
+
+          <Touchpad
+            disabled={state.status !== "playing"}
+            onLeft={() => dispatch({ type: "move", dx: -1 })}
+            onRight={() => dispatch({ type: "move", dx: 1 })}
+            onRotate={() => dispatch({ type: "rotate" })}
+            onSoft={() => dispatch({ type: "softDrop" })}
+            onHard={() => dispatch({ type: "hardDrop" })}
+          />
+        </aside>
       </div>
     </div>
   );
-};
+}
 
-// 셀 컴포넌트
-const Cell: React.FC<{ type: number }> = ({ type }) => {
-  const color = TETROMINOS[type] ? TETROMINOS[type].color : '0, 0, 0';
-  
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className="cell"
-      style={{
-        backgroundColor: type !== 0 ? `rgb(${color})` : 'transparent',
-        border: type === 0 ? '0px solid' : '2px solid',
-        borderColor: type !== 0 ? `rgb(${color})` : 'transparent',
-        boxShadow: type !== 0 ? 'inset 2px 2px 4px rgba(255,255,255,0.3), inset -2px -2px 4px rgba(0,0,0,0.3)' : 'none',
-      }}
-    />
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{value}</div>
+    </div>
   );
-};
+}
 
-// 다음 블록 셀 컴포넌트
-const NextCell: React.FC<{ type: number; tetromino: { shape: number[][]; color: string; emoji: string } }> = ({ type, tetromino }) => {
-  const color = type !== 0 ? tetromino.color : '0, 0, 0';
-  
+function Touchpad({
+  disabled,
+  onLeft,
+  onRight,
+  onRotate,
+  onSoft,
+  onHard,
+}: {
+  disabled: boolean;
+  onLeft: () => void;
+  onRight: () => void;
+  onRotate: () => void;
+  onSoft: () => void;
+  onHard: () => void;
+}) {
+  // Hidden on desktop via CSS; surfaces on touch viewports.
   return (
-    <div
-      className="next-cell"
-      style={{
-        backgroundColor: type !== 0 ? `rgb(${color})` : 'transparent',
-        border: type === 0 ? '0px solid' : '1px solid',
-        borderColor: type !== 0 ? `rgb(${color})` : 'transparent',
-        boxShadow: type !== 0 ? 'inset 1px 1px 2px rgba(255,255,255,0.3), inset -1px -1px 2px rgba(0,0,0,0.3)' : 'none',
-      }}
-    />
+    <div className={`touchpad ${disabled ? "disabled" : ""}`} aria-hidden={disabled}>
+      <button className="tp tp-rot" onClick={onRotate} aria-label="rotate">↻</button>
+      <button className="tp tp-left" onClick={onLeft} aria-label="left">←</button>
+      <button className="tp tp-right" onClick={onRight} aria-label="right">→</button>
+      <button className="tp tp-soft" onClick={onSoft} aria-label="soft drop">↓</button>
+      <button className="tp tp-hard" onClick={onHard} aria-label="hard drop">⤓</button>
+    </div>
   );
-};
-
-export default App; 
+}
