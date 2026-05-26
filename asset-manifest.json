@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/rabris/static/css/main.02ea8b23.css",
+    "main.js": "/rabris/static/js/main.532a86ac.js",
+    "index.html": "/rabris/index.html",
+    "main.02ea8b23.css.map": "/rabris/static/css/main.02ea8b23.css.map",
+    "main.532a86ac.js.map": "/rabris/static/js/main.532a86ac.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.02ea8b23.css",
+    "static/js/main.532a86ac.js"
+  ]
+}

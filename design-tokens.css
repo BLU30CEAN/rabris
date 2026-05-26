@@ -1,0 +1,126 @@
+/* BLU30CEAN — Cyber Cobalt design tokens v1.0.0
+ * 모든 프로젝트는 본 파일을 import하거나 <link>로 로드한다.
+ * `ops design publish`로 각 프로젝트의 public/ 또는 src/ 로 복사된다.
+ */
+
+:root {
+  /* === core === */
+  --bc-ink:      #0B1220;
+  --bc-ink-2:    #121A2C;
+  --bc-paper:    #F4F7FB;
+  --bc-paper-2:  #E6ECF4;
+
+  /* === brand === */
+  --bc-cobalt:   #0040FF;
+  --bc-cobalt-2: #1E5BFF;
+  --bc-cyan:     #00D4FF;
+  --bc-lime:     #A8FF60;
+  --bc-magenta:  #FF3DA5;
+  --bc-amber:    #FFB020;
+
+  /* === semantic === */
+  --bc-ok:      #22C55E;
+  --bc-warn:    #F59E0B;
+  --bc-danger:  #EF4444;
+  --bc-info:    var(--bc-cyan);
+
+  /* === game (word-baseball reuses; pocket-poker/rabris alias) === */
+  --bc-strike:     #22C55E;
+  --bc-strike-dup: #10B981;
+  --bc-ball:       #F59E0B;
+  --bc-out:        #475569;
+
+  /* === surface (theme-aware) === */
+  --bc-bg:      var(--bc-paper);
+  --bc-bg-2:    var(--bc-paper-2);
+  --bc-fg:      var(--bc-ink);
+  --bc-fg-2:    #475569;
+  --bc-border:  #D5DDEB;
+
+  /* === radius === */
+  --bc-r-xs: 4px; --bc-r-sm: 8px; --bc-r-md: 12px; --bc-r-lg: 20px; --bc-r-pill: 9999px;
+
+  /* === space === */
+  --bc-s-1: 4px; --bc-s-2: 8px; --bc-s-3: 12px; --bc-s-4: 16px;
+  --bc-s-5: 24px; --bc-s-6: 32px; --bc-s-8: 48px; --bc-s-10: 64px;
+
+  /* === font === */
+  --bc-font-sans: Inter, 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --bc-font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --bc-fs-xs: .75rem; --bc-fs-sm: .875rem; --bc-fs-base: 1rem; --bc-fs-lg: 1.125rem;
+  --bc-fs-xl: 1.25rem; --bc-fs-2xl: 1.5rem; --bc-fs-3xl: 2rem; --bc-fs-4xl: 2.75rem; --bc-fs-5xl: 3.75rem;
+
+  /* === motion === */
+  --bc-dur-fast: 120ms; --bc-dur: 240ms; --bc-dur-slow: 440ms;
+  --bc-ease-out:    cubic-bezier(.2,.7,.2,1);
+  --bc-ease-spring: cubic-bezier(.34,1.56,.64,1);
+
+  /* === shadow === */
+  --bc-sh-sm:   0 1px 2px rgba(11,18,32,.08);
+  --bc-sh-md:   0 6px 24px rgba(0,64,255,.18);
+  --bc-sh-lg:   0 24px 48px rgba(0,64,255,.22);
+  --bc-sh-glow: 0 0 0 1px rgba(0,212,255,.4), 0 8px 32px rgba(0,212,255,.25);
+
+  /* === gradient === */
+  --bc-grad-cobalt:     linear-gradient(135deg, #0040FF 0%, #00D4FF 100%);
+  --bc-grad-experiment: linear-gradient(135deg, #0040FF 0%, #FF3DA5 100%);
+  --bc-grad-playful:    linear-gradient(135deg, #00D4FF 0%, #A8FF60 100%);
+}
+
+/* === dark mode === */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bc-bg:     var(--bc-ink);
+    --bc-bg-2:   var(--bc-ink-2);
+    --bc-fg:     #E6ECF4;
+    --bc-fg-2:   #94A3B8;
+    --bc-border: #1F2A44;
+  }
+}
+
+[data-theme="dark"] {
+  --bc-bg:     var(--bc-ink);
+  --bc-bg-2:   var(--bc-ink-2);
+  --bc-fg:     #E6ECF4;
+  --bc-fg-2:   #94A3B8;
+  --bc-border: #1F2A44;
+}
+[data-theme="light"] {
+  --bc-bg:     var(--bc-paper);
+  --bc-bg-2:   var(--bc-paper-2);
+  --bc-fg:     var(--bc-ink);
+  --bc-fg-2:   #475569;
+  --bc-border: #D5DDEB;
+}
+
+/* === primitive helpers (optional) === */
+.bc-chip {
+  display: inline-flex; align-items: center; gap: var(--bc-s-2);
+  padding: var(--bc-s-1) var(--bc-s-3); border-radius: var(--bc-r-pill);
+  background: var(--bc-bg-2); color: var(--bc-fg); font-size: var(--bc-fs-sm);
+  border: 1px solid var(--bc-border); font-family: var(--bc-font-mono);
+}
+.bc-tag-cobalt   { background: var(--bc-grad-cobalt);     color: #fff; }
+.bc-tag-experiment { background: var(--bc-grad-experiment); color: #fff; }
+.bc-tag-playful  { background: var(--bc-grad-playful);    color: var(--bc-ink); }
+
+.bc-card {
+  background: var(--bc-bg-2); border: 1px solid var(--bc-border);
+  border-radius: var(--bc-r-lg); padding: var(--bc-s-5);
+  transition: transform var(--bc-dur) var(--bc-ease-out),
+              box-shadow var(--bc-dur) var(--bc-ease-out),
+              border-color var(--bc-dur) var(--bc-ease-out);
+}
+.bc-card:hover { transform: translateY(-4px); box-shadow: var(--bc-sh-md); border-color: var(--bc-cobalt-2); }
+
+.bc-btn {
+  display: inline-flex; align-items: center; gap: var(--bc-s-2);
+  padding: var(--bc-s-3) var(--bc-s-5); border-radius: var(--bc-r-pill);
+  border: 1px solid transparent; cursor: pointer; font-weight: 600;
+  font-family: var(--bc-font-sans); transition: all var(--bc-dur) var(--bc-ease-out);
+}
+.bc-btn-primary { background: var(--bc-grad-cobalt); color: #fff; box-shadow: var(--bc-sh-md); }
+.bc-btn-primary:hover { transform: translateY(-2px); box-shadow: var(--bc-sh-glow); }
+.bc-btn-ghost   { background: transparent; border-color: var(--bc-border); color: var(--bc-fg); }
+.bc-btn-ghost:hover { border-color: var(--bc-cobalt-2); color: var(--bc-cobalt-2); }
